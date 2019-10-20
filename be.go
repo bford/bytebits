@@ -1,17 +1,3 @@
-// This package provides bit-manipulation and bit-field-manipulation functions
-// that operate on byte slices.
-// It contains functions similar to those the standard 'math/bits' package
-// provides for unsigned integers, but operating on byte slices.
-// I would like to see some package like this added to the Go standard library,
-// perhaps as a "bytes/bits" sub-package of the current "bytes" package.
-//
-// These functions could probably be sped up significantly
-// via architecture-specific optimizations
-// similarly to the math/bits primitives,
-// but this implementation currently does not do so.
-//
-// XXX todo: LittleEndianBits, ...
-//
 package bytebits
 
 import (
@@ -25,15 +11,6 @@ type BigEndianBits struct{}
 
 // BigEndian instantiates the BitOrder interface for bit-endian bit order.
 var BigEndian = BigEndianBits{}
-
-
-// Returns dst if dst is at least l bytes, otherwise allocates a new dst.
-func mk(dst []byte, l int) []byte {
-	if len(dst) < l {
-		return make([]byte, l)
-	}
-	return dst
-}
 
 
 // Extract a bit-field the size of slice z
@@ -83,22 +60,25 @@ func extract2(z, x, y []byte, ofs int) {
 	}
 }
 
+
+// XXX want this?  what's the right API?
+// If bits is not a multiple of 8, dstAlign determines whether
+// the extracted bit-field is Left or Right aligned within dst.
+
 // Bits extracts a bit-field of width bits starting at bit ofs in src,
 // places the contents of the field into slice dst, and returns dst.
 // Allocates a new byte slice if dst is null or not large enough.
-// If bits is not a multiple of 8, dstAlign determines whether
-// the extracted bit-field is Left or Right aligned within dst.
 // All other bits within dst are set to zero.
-func (_ BigEndianBits) Bits(dst, src []byte, ofs, bits int, dstAlign Align) []byte {
+func (_ BigEndianBits) Bits(dst, src []byte, ofs, bits int) []byte {
 
 	l := (bits+7) >> 3
 	lbits := bits & 7
 
 	// Make sure dst is large enough
-	dst = mk(dst, l)
+	dst = Grow(dst, l)
 
-	switch dstAlign {
-	case Left:
+	//switch dstAlign {
+	//case Left:
 		// Extract a byte-padded left-aligned bit-field from src.
 		// Logically append a zero byte to ensure enough source bits.
 		extract2(dst[:l], src, zeroByte, ofs)
@@ -111,7 +91,8 @@ func (_ BigEndianBits) Bits(dst, src []byte, ofs, bits int, dstAlign Align) []by
 			dst[l] = 0
 		}
 
-	case Right:
+	//case Right:
+	if false {
 		// Extract a byte-padded right-aligned bit-field from src.
 		pad := len(dst) - l
 		for i := range(dst[:pad]) {
@@ -129,6 +110,8 @@ func (_ BigEndianBits) Bits(dst, src []byte, ofs, bits int, dstAlign Align) []by
 			fld[0] &= byte(0xff) >> (8 - lbits)
 		}
 	}
+	// }
+
 	return dst
 }
 
@@ -181,7 +164,7 @@ func (_ BigEndianBits) RotateLeft(dst, src []byte, n int) []byte {
 	if l == 0 {
 		return dst		// nothing to rotate
 	}
-	dst = mk(dst, l)
+	dst = Grow(dst, l)
 	if n < -8 {			// large right rotate
 		lbits := l * 8		// recalculate it as a left rotate
 		n = lbits + (n % lbits)
@@ -216,10 +199,6 @@ func (_ BigEndianBits) RotateLeft(dst, src []byte, n int) []byte {
 // XXX SetBits etc
 // XXX ExtractRight?
 // XXX ShiftLeft, ShiftRight
-
-func (_ BigEndianBits) OnesCount(src []byte) (n int) {
-	return onesCount(src)
-}
 
 func (_ BigEndianBits) LeadingZeros(src []byte) (n int) {
 	for _, v := range(src) {
