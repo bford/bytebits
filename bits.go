@@ -2,8 +2,10 @@
 // that operate on byte slices.
 // It contains functions similar to those the standard 'math/bits' package
 // provides for unsigned integers, but operating on byte slices.
-// I would like to see some package like this added to the Go standard library,
+// I would like to see this functionality added to the Go standard library,
 // perhaps as a "bytes/bits" sub-package of the current "bytes" package.
+//
+// This package is preliminary, unstable, and incompletely tested.  Beware.
 //
 // These functions could probably be sped up significantly
 // via architecture-specific optimizations

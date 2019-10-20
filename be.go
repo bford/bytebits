@@ -6,11 +6,32 @@ import (
 )
 
 
-// BigEndianBits implements the BitOrder interfacea for big-endian bit-ordering.
-type BigEndianBits struct{}
+// BigEndianOrder provides bitwise operations that treat the bits in each byte
+// as having big-endian bit ordering.
+//
+// To illustrate, with big-endian bit ordering,
+// a bit-field starting at bit offset 14 and having a width of five bits
+// will contain the least-significant two bits of the second byte
+// and the most-significant three bits of the third, as follows:
+//
+//	offset 14 = 8+6 bits            5-bit width
+//	------------------------------> |<------->|
+//	+-----------------+-----------------+-----------------+
+//	| 7 6 5 4 3 2 1 0 | 7 6 5 4 3 2 1 0 | 7 6 5 4 3 2 1 0 | 
+//	+-----------------+-----------------+-----------------+
+//
+// You normally invoke its methods via the standard BigEndian instance.
+// For example, to extract the 5-bit field illustrated above, you can invoke:
+//
+//	BigEndian.Bits(dst, src, 14, 5)
+//
+// BigEndianOrder implements the BitOrder interface for big endian ordering.
+// This interface may be used to parameterize the bit ordering in other code.
+//
+type BigEndianOrder struct{}
 
 // BigEndian instantiates the BitOrder interface for bit-endian bit order.
-var BigEndian = BigEndianBits{}
+var BigEndian = BigEndianOrder{}
 
 
 // Extract a bit-field the size of slice z
@@ -69,7 +90,7 @@ func extract2(z, x, y []byte, ofs int) {
 // places the contents of the field into slice dst, and returns dst.
 // Allocates a new byte slice if dst is null or not large enough.
 // All other bits within dst are set to zero.
-func (_ BigEndianBits) Bits(dst, src []byte, ofs, bits int) []byte {
+func (_ BigEndianOrder) Bits(dst, src []byte, ofs, bits int) []byte {
 
 	l := (bits+7) >> 3
 	lbits := bits & 7
@@ -115,41 +136,109 @@ func (_ BigEndianBits) Bits(dst, src []byte, ofs, bits int) []byte {
 	return dst
 }
 
-// Returns the value of the bit at position ofs from the left end of src.
+// Bit returns the value of the bit at position ofs from the left end of src.
 // Because the bytes in src are viewed as in big-endian bit order,
 // offset 0 is the most-significant bit of src[0] and
 // offset 7 is the least-significant bit of src[0].
-func (_ BigEndianBits) Bit(src []byte, ofs int) uint {
+func (_ BigEndianOrder) Bit(src []byte, ofs int) uint {
 	return uint(src[ofs >> 3] >> (7 - (ofs & 7))) & 1
 }
 
-// Extracts a uint8 starting at bit position ofs from the left of src.
-func (_ BigEndianBits) Uint8(src []byte, ofs int) uint8 {
+// Uint8 extracts a uint8 starting at bit position ofs from the left of src.
+func (_ BigEndianOrder) Uint8(x []byte, ofs int) uint8 {
 	var b [1]byte
-	extract2(b[:], src, nil, ofs)
+	extract2(b[:], x, nil, ofs)
 	return b[0]
 }
 
-// Extracts a uint16 starting at bit position ofs from the left of src.
-func (_ BigEndianBits) Uint16(src []byte, ofs int) uint16 {
+// Uint16 extracts a uint16 starting at bit position ofs from the left of src.
+func (_ BigEndianOrder) Uint16(x []byte, ofs int) uint16 {
 	var b [2]byte
-	extract2(b[:], src, nil, ofs)
+	extract2(b[:], x, nil, ofs)
 	return binary.BigEndian.Uint16(b[:])
 }
 
-// Extracts a uint32 starting at bit position ofs from the left of src.
-func (_ BigEndianBits) Uint32(src []byte, ofs int) uint32 {
+// Uint32 extracts a uint32 starting at bit position ofs from the left of src.
+func (_ BigEndianOrder) Uint32(x []byte, ofs int) uint32 {
 	var b [4]byte
-	extract2(b[:], src, nil, ofs)
+	extract2(b[:], x, nil, ofs)
 	return binary.BigEndian.Uint32(b[:])
 }
 
-// Extracts a uint64 starting at bit position ofs from the left of src.
-func (_ BigEndianBits) Uint64(src []byte, ofs int) uint64 {
+// Uint64 extracts a uint64 starting at bit position ofs from the left of src.
+func (_ BigEndianOrder) Uint64(x []byte, ofs int) uint64 {
 	var b [8]byte
-	extract2(b[:], src, nil, ofs)
+	extract2(b[:], x, nil, ofs)
 	return binary.BigEndian.Uint64(b[:])
 }
+
+
+// SetBit sets the bit at position ofs from the left of src in z to value v,
+// and returns the destination slice z.
+// Copies and returns a larger slice if z is too small.
+//
+func (_ BigEndianOrder) SetBit(z []byte, ofs int, v uint) []byte {
+	obytes := ofs >> 3
+	obits := ofs & 7
+	z = Grow(z, obytes+1)
+	z[obytes] = (z[obytes] &^ (1 << obits)) | (byte(v & 1) << obits)
+	return z
+}
+
+// SetBits sets the contents of a bit-field in slice dst of width bits,
+// starting at bit position ofs, to the left-aligned bits in slice x.
+// Copies and returns a larger slice if z is too small.
+//
+func(_ BigEndianOrder) SetBits(z, x []byte, ofs, bits int) []byte {
+
+	// Ensure the destination slice contains the complete bit-field
+	z = Grow(z, (ofs+bits+7) >> 3)
+
+	// Nothing else to do if there are no bits to insert.
+	if bits == 0 {
+		return z
+	}
+
+	obytes := ofs >> 3
+	obits := ofs & 7
+	lbytes := bits >> 3
+	lbits := bits & 7
+	ebytes := (ofs+bits) >> 3
+	ebits := (ofs+bits) & 7
+
+	// Handle case where start and end of bit-field are in the same byte
+	if ebytes == obytes {
+		mask := (byte(0xff) >> obits) & (byte(0xff) << (8-ebits))
+		z[obytes] = (z[obytes] &^ mask) | ((x[0] >> obits) & mask)
+		return z
+	}
+
+	// Handle case where the bit field happens to be byte-aligned
+	if obits == 0 {
+		copy(z[obytes:], x[:lbytes])
+		if ebits > 0 {
+			mask := byte(0xff) >> ebits
+			z[obytes+lbytes] = (z[obytes+lbytes] & mask) |
+						(x[lbytes] &^ mask)
+		}
+		return z
+	}
+
+	// Handle first partial byte of the bit field
+	i, j := obytes, 0
+	z[i] = (z[i] &^ (byte(0xff) >> obits)) | (x[j] >> obits)
+	i++
+
+	// Handle all complete destination slice bytes in the bit-field
+
+
+	// Handle any final partial byte 
+	if lbits > 0 {
+	}
+
+	return z
+}
+
 
 // RotateLeft rotates all bytes in src left by n bits,
 // places the result in dst, and returns dst.
@@ -157,7 +246,7 @@ func (_ BigEndianBits) Uint64(src []byte, ofs int) uint64 {
 // Allocates a new byte slice if dst is null or not long enough.
 // The dst slice must not overlap src, except if -8 <= n <= 8,
 // in which case dst and src may be identical for small in-place rotations.
-func (_ BigEndianBits) RotateLeft(dst, src []byte, n int) []byte {
+func (_ BigEndianOrder) RotateLeft(dst, src []byte, n int) []byte {
 
 	// Ensure the dst buffer is large enough
 	l := len(src)
@@ -200,7 +289,7 @@ func (_ BigEndianBits) RotateLeft(dst, src []byte, n int) []byte {
 // XXX ExtractRight?
 // XXX ShiftLeft, ShiftRight
 
-func (_ BigEndianBits) LeadingZeros(src []byte) (n int) {
+func (_ BigEndianOrder) LeadingZeros(src []byte) (n int) {
 	for _, v := range(src) {
 		if v != 0 {
 			return n + bits.LeadingZeros8(v)
@@ -210,7 +299,7 @@ func (_ BigEndianBits) LeadingZeros(src []byte) (n int) {
 	return n
 }
 
-func (_ BigEndianBits) TrailingZeros(src []byte) (n int) {
+func (_ BigEndianOrder) TrailingZeros(src []byte) (n int) {
 	for i := len(src)-1; i >= 0; i-- {
 		v := src[i]
 		if v != 0 {
