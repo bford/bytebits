@@ -21,6 +21,92 @@ import (
 )
 
 
+
+// Pos represents a bit position in an abstract bit vector.
+// It effectively serves as an interator over bit vector words.
+//
+// Add moves the position to the right if bits is positive,
+// or to the left if bits is negative.
+//
+// Word extracts up to one word from the bit vector
+// starting at the current position.
+// If n is less than the word size, extracts only the next n bits
+// into the least-significant n bits of the returned Word.
+// 
+// SetWord deposits up to one word into the bit vector
+// starting at the current position,
+// without affecting any other bits in the bit vector.
+// If n is less than the word size, inserts only the next n bits
+// from the least-significant n bits of the word parameter.
+//
+//type pos interface {
+//	Add(n int)			// Move right (+) or left (-) n bits
+//	Word(n int) Word		// Extract up to n bits at position
+//	SetWord(n int, uint64 Word)	// Insert up to n bits at position
+//}
+
+
+type bitPut interface {
+	Put(n int, w uint64)
+}
+
+type bitGet interface {
+	Get(n int) uint64
+}
+
+func bitCopy(zp bitPut, xp bitGet, bits int) {
+	for bits >= 64 {
+		zp.Put(64, xp.Get(64))
+		bits -= 64
+	}
+	zp.Put(bits, xp.Get(bits))
+}
+
+
+// A bare, endian-neutral bit position in a byte slice
+type bytePos struct{
+	b []byte	// Underlying byte slice
+	o int		// Bit offset within current byte, 0-7
+}
+
+
+// catPos implements the bitGet interface by logically concatenating
+// two existing getters x and y.
+// Returns bits from x until xbits is exhausted, then returns bits from y.
+//
+type catPos struct {
+	x, y bitGet
+	xbits int
+}
+
+func (p *catPos) Set(x, y bitGet, xbits int) {
+	p.x, p.y, p.xbits = x, y, xbits
+}
+
+
+
+func (p *catPos) Get(n int) uint64 {
+	if p.xbits == 0 {		// x is exhausted, so just use y
+		return p.y.Get(n)
+	}
+	if n > 64 {
+		n = 64
+	}
+	if p.xbits >= n {		// just get and return bits from x
+		p.xbits -= n
+		return p.x.Get(n)
+	}
+
+	// Handle the transition from x to y.
+	ybits := n - p.xbits
+	v := p.x.Get(p.xbits) << ybits
+	v |= p.y.Get(ybits)
+	p.xbits = 0
+	return v
+}
+
+
+
 // BitOrder defines an interface to bit-field operations
 // that depend on bit order.
 // This package provides the two implementations
