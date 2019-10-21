@@ -18,3 +18,15 @@ type field struct{
 	w int		// Total width of the field in bits
 }
 
+// Field is an interface to a bit-field
+// providing common bit manipulation operations.
+type Field interface {
+	Set(x Field) Field
+	And(x, y Field) Field
+	AndNot(x, y Field) Field
+	Or(x, y Field) Field
+	Xor(x, y Field) Field
+	Not(x Field) Field
+	RotateLeft(x Field, rot int) Field
+	// XXX ShiftLeft, ...
+}

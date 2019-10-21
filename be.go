@@ -201,7 +201,7 @@ func beCopy(zb, xb []byte, zo, xo, w int) ([]byte, []byte, int, int) {
 // Copies z and returns a new slice if z is null or not large enough.
 // All other bits within z are left unmodified.
 //
-func (_ BigEndianOrder) Copy(z []byte, x []byte, zofs, xofs, w int) []byte {
+func (be BigEndianOrder) Copy(z []byte, x []byte, zofs, xofs, w int) []byte {
 	xb, xo := beNorm(x, xofs)
 	z, zb, zo := beGrow(z, zofs, w)
 	beCopy(zb, xb, zo, xo, w)
@@ -346,7 +346,7 @@ func (be BigEndianOrder) RotateLeft(z, x []byte, rot int) []byte {
 }
 
 
-func (_ BigEndianOrder) LeadingZeros(src []byte) (n int) {
+func (be BigEndianOrder) LeadingZeros(src []byte) (n int) {
 	for _, v := range(src) {
 		if v != 0 {
 			return n + bits.LeadingZeros8(v)
@@ -356,7 +356,7 @@ func (_ BigEndianOrder) LeadingZeros(src []byte) (n int) {
 	return n
 }
 
-func (_ BigEndianOrder) TrailingZeros(src []byte) (n int) {
+func (be BigEndianOrder) TrailingZeros(src []byte) (n int) {
 	for i := len(src)-1; i >= 0; i-- {
 		v := src[i]
 		if v != 0 {
@@ -365,5 +365,9 @@ func (_ BigEndianOrder) TrailingZeros(src []byte) (n int) {
 		n += 8
 	}
 	return n
+}
+
+func (be BigEndianOrder) Field(buf []byte, ofs, width int) Field {
+	return (&BigEndianField{}).Init(buf, ofs, width)
 }
 
