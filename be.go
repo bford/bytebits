@@ -308,12 +308,38 @@ func (be BigEndianOrder) PutBytes(z []byte, zofs int, b []byte) []byte {
 // RotateLeft sets slice z to the contents of x rotated left by rot bits.
 // To rotate right, pass a negative value for rot.
 // Copies z and returns a new slice if z is nil or not large enough.
-// The slices x and z must not overlap, except if -7 <= rot <= 7,
+// The slices x and z must not overlap, except if -8 <= rot <= 8,
 // in which case x and z may be identical for small in-place bit rotations.
 func (be BigEndianOrder) RotateLeft(z, x []byte, rot int) []byte {
 
 	// Ensure destination z is large enough.
 	z = Grow(z, len(x))
+
+	if rot == 0 || len(x) == 0 {	// Special case: no rotation
+		copy(z, x)
+		return z
+	} else if rot > 0 && rot <= 8 {	// Special case: small left rotation
+		l := len(x)
+		r := 8-rot
+		c := x[0] >> r
+		for i := l-1; i >= 0; i-- {
+			v := x[i]
+			z[i] = (v << rot) | c
+			c = v >> r
+		}
+		return z
+	} else if rot < 0 && rot >= -8 { // Special case: small right rotation
+		rot = -rot
+		l := len(x)
+		r := 8-rot
+		c := x[l-1] << r
+		for i := range x {
+			v := x[i]
+			z[i] = (v >> rot) | c
+			c = v << r
+		}
+		return z
+	}
 
 	// Determine the starting bit position to copy from source field x
 	w := len(x) * 8
