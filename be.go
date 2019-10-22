@@ -9,17 +9,6 @@ import (
 // BigEndianOrder provides bitwise operations that treat the bits in each byte
 // as having big-endian bit ordering.
 //
-// To illustrate, with big-endian bit ordering,
-// a bit-field starting at bit offset 14 and having a width of five bits
-// will contain the least-significant two bits of the second byte
-// and the most-significant three bits of the third, as follows:
-//
-//	offset 14 = 8+6 bits            5-bit width
-//	------------------------------> |<------->|
-//	+-----------------+-----------------+-----------------+
-//	| 7 6 5 4 3 2 1 0 | 7 6 5 4 3 2 1 0 | 7 6 5 4 3 2 1 0 | 
-//	+-----------------+-----------------+-----------------+
-//
 // You normally invoke its methods via the standard BigEndian instance.
 // For example, to extract the 5-bit field illustrated above, you can invoke:
 //
@@ -346,23 +335,52 @@ func (be BigEndianOrder) RotateLeft(z, x []byte, rot int) []byte {
 }
 
 
-func (be BigEndianOrder) LeadingZeros(src []byte) (n int) {
-	for _, v := range(src) {
-		if v != 0 {
-			return n + bits.LeadingZeros8(v)
+// Leading counts the number of consecutive leading bits with value b
+// in slice z starting from the most-significant bit of the first byte.
+func (be BigEndianOrder) Leading(z []byte, b uint) (n int) {
+	switch b {
+	case 0:
+		for _, v := range(z) {
+			if v != 0 {
+				return n + bits.LeadingZeros8(v)
+			}
+			n += 8
 		}
-		n += 8
+	case 1:
+		for _, v := range(z) {
+			if v != 0 {
+				return n + bits.LeadingZeros8(^v)
+			}
+			n += 8
+		}
+	default:
+		panic("Count: invalid bit value")
 	}
 	return n
 }
 
-func (be BigEndianOrder) TrailingZeros(src []byte) (n int) {
-	for i := len(src)-1; i >= 0; i-- {
-		v := src[i]
-		if v != 0 {
-			return n + bits.TrailingZeros8(v)
+// Trailing counts the number of consecutive trailing bits with value b
+// in slice z starting from the least-significant bit of the last byte.
+func (be BigEndianOrder) Trailing(z []byte, b uint) (n int) {
+	switch b {
+	case 0:
+		for i := len(z)-1; i >= 0; i-- {
+			v := z[i]
+			if v != 0 {
+				return n + bits.TrailingZeros8(v)
+			}
+			n += 8
 		}
-		n += 8
+	case 1:
+		for i := len(z)-1; i >= 0; i-- {
+			v := z[i]
+			if v != 0xff {
+				return n + bits.TrailingZeros8(^v)
+			}
+			n += 8
+		}
+	default:
+		panic("Count: invalid bit value")
 	}
 	return n
 }

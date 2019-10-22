@@ -2,17 +2,71 @@
 // that operate on byte slices.
 // It contains functions similar to those the standard 'math/bits' package
 // provides for unsigned integers, but operating on byte slices.
-// I would like to see this functionality added to the Go standard library,
+// Some of this functionality might really belong in the Go standard library,
 // perhaps as a "bytes/bits" sub-package of the current "bytes" package.
 //
 // This package is preliminary, unstable, and incompletely tested.  Beware.
 //
+// Overview
+//
+// The And, AndNot, Or, Xor, and Not functions perform the obvious 
+// bitwise operations on entire byte slices, either in-place,
+// or into a destination that is allocated or grown as needed.
+// Count counts the total number of zero or one bits in a slice.
+//
+// The BigEndian and LittleEndian variables are instances of the
+// BigEndianOrder and LittleEndianOrder types, respectively,
+// which provide endianness-dependent bit operations on byte slices.
+// These operations treat byte slices as bit vectors
+// in either big-endian or little-endian bit ordering,
+// as illustrated below.
+//
+//
+// Big Endian Bit Ordering
+//
+// To illustrate big-endian bit ordering,
+// a bit-field starting at bit offset 14 and having a width of five bits
+// will contain the least-significant two bits of the second byte
+// and the most-significant three bits of the third byte, as follows:
+//
+//	offset 14 = 8+6 bits            5-bit width
+//	------------------------------> |<------->|
+//	+-----------------+-----------------+-----------------+
+//	| 7 6 5 4 3 2 1 0 | 7 6 5 4 3 2 1 0 | 7 6 5 4 3 2 1 0 | 
+//	+-----------------+-----------------+-----------------+
+//
+// The BigEndian.Uint* and BigEndian.PutUint* operations use big endian
+// as both bit order within bytes and byte order within integers
+// to be read or written at arbitrary positions in a slice.
+//
+//
+// Little Endian Bit Ordering
+//
+// To illustrate big-endian bit ordering,
+// a bit-field starting at bit offset 14 and having a width of five bits
+// will contain the most-significant two bits of the second byte
+// and the least-significant three bits of the third byte, as follows:
+//
+//	offset 14 = 8+6 bits            5-bit width
+//	------------------------------> |<------->|
+//	+-----------------+-----------------+-----------------+
+//	| 0 1 2 3 4 5 6 7 | 0 1 2 3 4 5 6 7 | 0 1 2 3 4 5 6 7 | 
+//	+-----------------+-----------------+-----------------+
+//
+// The BigEndian.Uint* and BigEndian.PutUint* operations use big endian
+// as both bit order within bytes and byte order within integers
+// to be read or written at arbitrary positions in a slice.
+//
+//
+// Limitations
+// 
 // These functions could probably be sped up significantly
 // via architecture-specific optimizations
 // similarly to the math/bits primitives,
 // but this implementation currently does not do so.
 //
-// XXX todo: LittleEndianBits, more tests, ...
+// Still todo: little endian, shift operations, field Leading/Trailing,
+// more/better testing, bit I/O, ...
 //
 package bytebits
 
@@ -111,7 +165,9 @@ func (p *catPos) Get(n int) uint64 {
 // that depend on bit order.
 // This package provides the two implementations
 // BigEndian and LittleEndian.
-type BitOrder interface {
+//
+// XXX
+type bitOrder interface {
 
 	Bit(src []byte, ofs int) uint
 	Uint8(src []byte, ofs int) uint8
@@ -202,7 +258,19 @@ func AndNot(z, x, y []byte) []byte {
 	return z
 }
 
-// And sets z to the bitwise OR of slices x and y, and returns z.
+// Or sets z to the bitwise OR of slices x and y, and returns z.
+// The source slices x and y must be of the same length.
+// Allocates and returns a new destination slice if z is not long enough.
+func Or(z, x, y []byte) []byte {
+	l := len2(x, y)
+	z = Grow(z, l)
+	for i := range x {
+		z[i] = x[i] | y[i]
+	}
+	return z
+}
+
+// Xor sets z to the bitwise XOR of slices x and y, and returns z.
 // The source slices x and y must be of the same length.
 // Allocates and returns a new destination slice if z is not long enough.
 func Xor(z, x, y []byte) []byte {
@@ -225,10 +293,19 @@ func Not(z, x []byte) []byte {
 	return z
 }
 
-// OnesCount returns the number of bits set in slice src.
-func OnesCount(src []byte) (n int) {
-	for _, v := range src {
-		n += bits.OnesCount8(v)
+// Count returns the number of bits with value v (0 or 1) in slice x.
+func Count(x []byte, v uint) (n int) {
+	switch v {
+	case 0:
+		for _, v := range x {
+			n += bits.OnesCount8(^v)
+		}
+	case 1:
+		for _, v := range x {
+			n += bits.OnesCount8(v)
+		}
+	default:
+		panic("Count: invalid bit value")
 	}
 	return n
 }

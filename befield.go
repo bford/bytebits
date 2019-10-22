@@ -2,6 +2,7 @@ package bytebits
 
 import (
 	"io"
+	"math/bits"
 )
 
 
@@ -178,5 +179,49 @@ func (z *BigEndianField) RotateLeft(x Field, rot int) Field {
 	// Then copy the rest of the bits from the beginning of the source
 	zb, xb, zo, xo = beCopy(zb, xf.b, zo, xf.o, rot)
 	return z
+}
+
+// Count returns the number of bits with value b (0 or 1) in field z.
+func (z *BigEndianField) Count(b uint) (n int) {
+	zb, zo, w := z.b, z.o, z.w
+	var v uint64
+	switch b {
+	case 0:
+		for w >= 64 {
+			zb, zo, v = beGet64(zb, zo)
+			n += bits.OnesCount64(^v)
+		}
+		zb, zo, v = beGet(zb, zo, w)
+		n += bits.OnesCount64(v ^ ((1 << w) - 1))
+	case 1:
+		for w >= 64 {
+			zb, zo, v = beGet64(zb, zo)
+			n += bits.OnesCount64(v)
+		}
+		zb, zo, v = beGet(zb, zo, w)
+		n += bits.OnesCount64(v)
+	default:
+		panic("Count: invalid bit value")
+	}
+	return n
+}
+
+// Fill sets all bits in field z to bit value b (0 or 1).
+func (z *BigEndianField) Fill(b uint) {
+	zb, zo, w := z.b, z.o, z.w
+	switch b {
+	case 0:
+		for w >= 64 {
+			zb, zo = bePut64(zb, zo, 0)
+		}
+		zb, zo = bePut(zb, zo, w, 0)
+	case 1:
+		for w >= 64 {
+			zb, zo = bePut64(zb, zo, (1<<64)-1)
+		}
+		zb, zo = bePut(zb, zo, w, (1<<64)-1)
+	default:
+		panic("Count: invalid bit value")
+	}
 }
 
